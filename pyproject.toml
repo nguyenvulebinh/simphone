@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simphone"
+version = "0.1.0"
+description = "Feature-weighted phonetic edit-distance search over a word or span list."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Linguistic",
+]
+# torch is not a dependency. English CharsiuG2P needs the build already in the
+# environment. Vietnamese uses sea-g2p and does not.
+dependencies = [
+    "numpy>=1.22",
+    "panphon>=0.20",
+    "rapidfuzz>=3",
+    "numba>=0.57",
+    "tqdm>=4.65",
+    "sea-g2p>=0.9.1",
+]
+
+[project.optional-dependencies]
+en = [
+    "text2phonemesequence>=0.1.4",
+    "transformers>=4.44",
+    "segments",
+    "huggingface_hub>=0.23",
+    "WeTextProcessing>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/nguyenvulebinh/simphone"
+Repository = "https://github.com/nguyenvulebinh/simphone"
+
+[project.scripts]
+simphone = "simphone.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
