@@ -8,6 +8,6 @@ from simphone.index import PhoneticIndex
 try:
     __version__ = version("simphone")
 except PackageNotFoundError:
-    __version__ = "0.1.0"
+    __version__ = "0.2.0"
 
 __all__ = ["PhoneticIndex", "normalize"]

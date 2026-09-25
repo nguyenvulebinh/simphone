@@ -23,6 +23,20 @@ VI_TONE_MARKS = frozenset({"2", "4", "5", "6", "\u025c"})
 TONE_CHARS = CHAO_TONE_CHARS | CHAO_EXTRA | VI_TONE_MARKS
 
 _DP_FUNC = None
+_FT = None
+
+
+def _is_single_phone(base: str) -> bool:
+    """True when panphon treats ``base`` as exactly one segment."""
+    if not base:
+        return False
+    global _FT
+    if _FT is None:
+        from panphon.featuretable import FeatureTable
+
+        _FT = FeatureTable()
+    segs = list(_FT.ipa_segs(base))
+    return len(segs) == 1 and segs[0] == base
 
 
 def is_tone_token(token: str) -> bool:
@@ -144,10 +158,16 @@ class PhoneticDistance:
         obj.cost_scale = float(cost_scale) if cost_scale and cost_scale > 0 else 1.0
         obj._dp = _get_dp()
         obj._recover_components()
+        obj._rescale_single_phones()
         return obj
 
     def _base_cost_matrix(self, bases: list[str]) -> tuple[np.ndarray, float]:
-        """Normalized ``[0,1]`` panphon distances. Empty base is the null segment."""
+        """Normalized ``[0,1]`` panphon distances. Empty base is the null segment.
+
+        ``cost_scale`` is the largest distance between two single panphon
+        phones. A multi-phone string left in the inventory cannot set the
+        scale, and its normalized cost is capped at 1 (one indel).
+        """
         from panphon.distance import Distance
 
         dist = Distance()
@@ -166,12 +186,23 @@ class PhoneticDistance:
                 if v != v:
                     v = -1.0
                 raw[i, j] = raw[j, i] = v
-        finite = raw[raw > 0]
-        scale = float(finite.max()) if finite.size else 1.0
+        single = [i for i in real if _is_single_phone(bases[i])]
+        vals = [
+            raw[single[x], single[y]]
+            for x in range(len(single))
+            for y in range(x + 1, len(single))
+            if raw[single[x], single[y]] > 0
+        ]
+        if vals:
+            scale = float(max(vals))
+        else:
+            finite = raw[raw > 0]
+            scale = float(finite.max()) if finite.size else 1.0
         if scale <= 0:
             scale = 1.0
         raw[raw < 0] = scale
         raw = raw / scale
+        np.minimum(raw, 1.0, out=raw)
         for i, b in enumerate(bases):
             if not b:
                 for j in range(n):
@@ -238,6 +269,37 @@ class PhoneticDistance:
         self._Cb = Cb
         self._tok_base = [base2id[b] for b in bases]
         self._tok_tone = tones
+
+    def _rescale_single_phones(self) -> None:
+        """Re-normalize a loaded matrix by the largest single-phone distance.
+
+        Indexes saved before this rule store a scale set by unsegmented
+        strings. Raw distances are ``normalized * cost_scale``, so the matrix
+        can be rescaled without panphon.
+        """
+        assert self._Cb is not None
+        old = self.cost_scale if self.cost_scale > 0 else 1.0
+        single = [i for i, b in enumerate(self._bases) if _is_single_phone(b)]
+        mx = 0.0
+        for x in range(len(single)):
+            ix = single[x]
+            for y in range(x + 1, len(single)):
+                raw = float(self._Cb[ix, single[y]]) * old
+                if raw > mx:
+                    mx = raw
+        if mx <= 0.0:
+            return
+        factor = old / mx
+        Cb = np.clip(np.asarray(self._Cb, dtype=np.float64) * factor, 0.0, 1.0)
+        np.fill_diagonal(Cb, 0.0)
+        n = len(self._bases)
+        for i, b in enumerate(self._bases):
+            if not b:
+                for j in range(n):
+                    Cb[i, j] = Cb[j, i] = 0.0 if i == j else 1.0
+        self._Cb = Cb
+        self.cost_scale = mx
+        self.cost = self._cost_from_components(self._tok_base, self._tok_tone)
 
     def _pair_base(self, dist, a: str, b: str) -> float:
         if a == b:

@@ -110,17 +110,14 @@ def _feature_table():
 
 
 def _segment_ipa(ipa: str) -> list[str]:
+    """Phones panphon recognizes. An unrecognized symbol is skipped.
+
+    The raw string is never returned as one phone. A residue panphon did not
+    consume (``fɪlᵻpiːnz``, ``lə1w``) must not enter the cost matrix.
+    """
     if not ipa:
         return []
-    ft = _feature_table()
-    segs = list(ft.ipa_segs(ipa))
-    if "".join(segs) == ipa:
-        return segs
-    # Keep any residue panphon did not consume, so a rare symbol is not dropped.
-    consumed = "".join(segs)
-    if ipa.startswith(consumed) and consumed:
-        return segs + [ipa[len(consumed) :]]
-    return [ipa]
+    return list(_feature_table().ipa_segs(ipa))
 
 
 def _attach_tone(segs: list[str], tone: str) -> list[str]:
